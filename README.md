@@ -1,19 +1,42 @@
 # contxtify
 
-`contxtify` is a portable Bash utility that recursively combines the contents of all regular files under a root directory into a single text file — ideal for generating AI-readable snapshots of codebases, configs, or documentation.
+`contxtify` is a lightweight Bash utility that recursively combines all regular files in a directory tree into a single text file — ideal for generating plain-text snapshots of entire projects for AI analysis, code reviews, or archival.
 
-Each file is prefixed with a header showing its relative path, preserving file context while enabling easy search and parsing.
+Each file is prefixed with a header like `# path: <root>/<relative/path>` before its contents, preserving full context and structure.
+
+---
+
+## 🚀 Installation
+
+Install directly (auto-selects `/usr/local/bin` or `~/.local/bin`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/RAMCloudCode/contxtify/main/install.sh | sh
+```
+
+Customize the target or branch:
+
+```bash
+REPO=RAMCloudCode/contxtify REF=main PREFIX=/usr/local \
+curl -fsSL https://raw.githubusercontent.com/RAMCloudCode/contxtify/main/install.sh | sh
+```
+
+Verify installation:
+
+```bash
+contxtify -h
+```
 
 ---
 
 ## 🧩 Features
 
-* **Recursive aggregation** — Walks the entire directory tree.
-* **Context headers** — Adds `# path: <root>/<relative/path>` before each file.
-* **Cross-platform** — Works on Linux and macOS (GNU or BSD utils).
-* **Hidden file control** — Skips dotfiles and hidden directories unless `--all` is used.
-* **Safe writing** — Uses a temporary file for atomic writes.
-* **Self-exclusion** — Automatically omits itself, its temp file, and the output file.
+* **Recursive aggregation** — walks the entire directory tree.
+* **Context headers** — adds each file’s relative path before its contents.
+* **Cross-platform** — works on macOS and Linux (GNU and BSD utils).
+* **Hidden file toggle** — skips dotfiles unless `--all` is passed.
+* **Safe writes** — uses a temporary file to prevent corruption.
+* **Self-aware** — automatically excludes itself, its output, and temp files.
 
 ---
 
@@ -23,14 +46,12 @@ Each file is prefixed with a header showing its relative path, preserving file c
 ./contxtify [-r ROOT] [-o OUT] [-a] [-h]
 ```
 
-### Options
-
-| Flag | Long Form         | Description                                                    |
-| ---- | ----------------- | -------------------------------------------------------------- |
-| `-r` | `--root <dir>`    | Root directory to scan. Default: current directory             |
-| `-o` | `--output <file>` | Output file name (created under ROOT). Default: `combined.txt` |
-| `-a` | `--all`           | Include hidden files and directories                           |
-| `-h` | `--help`          | Show help and exit                                             |
+| Flag | Long Form         | Description                                         |
+| ---- | ----------------- | --------------------------------------------------- |
+| `-r` | `--root <dir>`    | Root directory to scan (default: current directory) |
+| `-o` | `--output <file>` | Output file name (default: `combined.txt`)          |
+| `-a` | `--all`           | Include hidden files and directories                |
+| `-h` | `--help`          | Show help and exit                                  |
 
 ---
 
@@ -42,13 +63,13 @@ Combine everything in the current directory:
 ./contxtify
 ```
 
-Specify a project root and custom output file:
+Combine a specific project and name the output:
 
 ```bash
 ./contxtify -r /path/to/project -o merged.txt
 ```
 
-Include hidden files and directories:
+Include hidden files:
 
 ```bash
 ./contxtify --all
@@ -58,7 +79,7 @@ Include hidden files and directories:
 
 ## 🧠 Output Format
 
-Each file appears in the merged output like this:
+Example structure:
 
 ```
 # path: myproject/src/main.py
@@ -76,15 +97,15 @@ Each file appears in the merged output like this:
 
 * The script file itself
 * The output file
-* Its temporary working file
+* Temporary working files
 
 ---
 
 ## 💡 Common Use Cases
 
-* Preparing codebases for AI model ingestion or context packaging
-* Generating unified text archives for documentation or audits
-* Creating portable, human-readable project dumps
+* Exporting codebases for LLM or AI model ingestion
+* Generating plain-text project archives for documentation or audit
+* Sharing complex directory structures as unified readable text
 
 ---
 
@@ -95,34 +116,18 @@ Each file appears in the merged output like this:
 
 ---
 
-## 🚀 Installation
-
-Clone the repository and make it executable:
+## 🧹 Uninstall
 
 ```bash
-git clone https://github.com/<your-username>/contxtify.git
-cd contxtify
-chmod +x contxtify
-```
-
-Run directly from anywhere:
-
-```bash
-./contxtify -r ~/myproject
-```
-
-Or copy to your PATH:
-
-```bash
-sudo cp contxtify /usr/local/bin/
+rm -f /usr/local/bin/contxtify ~/.local/bin/contxtify
 ```
 
 ---
 
-## License
+## 🧾 License
 
-This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**.
+Licensed under the **GNU General Public License v3.0 (GPL-3.0)**.
 
-You may freely use, modify, and distribute this software under the same license terms.
+You may use, modify, and distribute this software under the same license terms.
 
 Copyright (C) 2025 Robert A. Moore III
