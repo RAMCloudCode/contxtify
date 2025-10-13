@@ -14,14 +14,17 @@ Install directly (auto-selects `/usr/local/bin` or `~/.local/bin`):
 curl -fsSL https://raw.githubusercontent.com/RAMCloudCode/contxtify/main/install.sh | sh
 ```
 
-To install to a custom directory:
+Choose an exact install directory by setting `TARGET_DIR` before running the installer:
 
 ```bash
-PREFIX=/custom/path curl -fsSL https://raw.githubusercontent.com/RAMCloudCode/contxtify/main/install.sh | sh
+TARGET_DIR=/usr/local/scripts curl -fsSL https://raw.githubusercontent.com/RAMCloudCode/contxtify/main/install.sh | sh
 ```
-If you set a custom PREFIX, the installer will automatically create a bin directory under it if one doesn’t exist.
 
 Verify installation:
+
+```bash
+contxtify -h
+```
 
 ```bash
 contxtify -h
@@ -52,7 +55,7 @@ This approach keeps your repository self-contained and works anywhere without re
 
 ---
 
-## Features
+## 🧩 Features
 
 * **Recursive aggregation** — walks the entire directory tree.
 * **Context headers** — adds each file’s relative path before its contents.
@@ -63,7 +66,7 @@ This approach keeps your repository self-contained and works anywhere without re
 
 ---
 
-## Usage
+## ⚙️ Usage
 
 ```bash
 contxtify [-r ROOT] [-o OUT] [-a] [-h]
@@ -78,7 +81,7 @@ contxtify [-r ROOT] [-o OUT] [-a] [-h]
 
 ---
 
-## Examples
+## 📘 Examples
 
 Combine everything in the current directory:
 
@@ -100,7 +103,9 @@ contxtify --all
 
 ---
 
-## Output File Format
+## 🧠 Output Format
+
+Example structure:
 
 ```
 # path: myproject/src/main.py
@@ -112,7 +117,7 @@ contxtify --all
 
 ---
 
-## Exclusions
+## 🔒 Exclusions
 
 `contxtify` automatically skips:
 
@@ -137,7 +142,7 @@ contxtify --all
 
 ---
 
-## Uninstall
+## 🧹 Uninstall
 
 ```bash
 rm -f /usr/local/bin/contxtify ~/.local/bin/contxtify
