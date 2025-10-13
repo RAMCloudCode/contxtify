@@ -32,8 +32,6 @@ contxtify -h
 
 If you prefer to keep `contxtify` as a lightweight, project-local tool, just drop the script itself into your repo’s **root directory** — no install needed.
 
-Add the script directly:
-
 ```bash
 curl -fsSL https://raw.githubusercontent.com/RAMCloudCode/contxtify/main/contxtify -o contxtify
 chmod +x contxtify
