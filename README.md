@@ -26,10 +26,6 @@ Verify installation:
 contxtify -h
 ```
 
-```bash
-contxtify -h
-```
-
 ---
 
 ## 📦 Drop‑in Script (Root Recommended)
