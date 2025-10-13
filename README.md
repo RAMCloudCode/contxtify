@@ -1,4 +1,4 @@
-# contxtify
+<h1 align="center"> contxtify </h1>
 
 `contxtify` is a lightweight shell utility that turns an entire folder into a single text file. It collects the contents of every file in the directory and its subfolders, adds each file’s path as a header, and combines everything into one `.txt` file.
 
@@ -6,7 +6,7 @@ The result is an easy way to turn a project or repository into context for AI, o
 
 ---
 
-## 🚀 Installation
+<h2 align="center"> 🚀 Installation </h2>
 
 Install directly (auto-selects `/usr/local/bin` or `~/.local/bin`):
 
@@ -28,7 +28,7 @@ contxtify -h
 
 ---
 
-## 📦 Drop‑in Script (Root Recommended)
+<h2 align="center"> 📦 Drop‑in Script (Root Recommended)</h2>
 
 If you prefer to keep `contxtify` as a lightweight, project-local tool, just drop the script itself into your repo’s **root directory** — no install needed.
 
@@ -99,8 +99,6 @@ contxtify --all
 
 ## 🧠 Output Format
 
-Example structure:
-
 ```
 # path: myproject/src/main.py
 <contents of main.py>
@@ -136,7 +134,7 @@ Example structure:
 
 ---
 
-## 🧹 Uninstall
+<h2 align="center"> Uninstall </h2>
 
 ```bash
 rm -f /usr/local/bin/contxtify ~/.local/bin/contxtify
