@@ -40,10 +40,10 @@ contxtify -h
 
 ---
 
-## ⚙️ Usage
+## Usage
 
 ```bash
-./contxtify [-r ROOT] [-o OUT] [-a] [-h]
+contxtify [-r ROOT] [-o OUT] [-a] [-h]
 ```
 
 | Flag | Long Form         | Description                                         |
@@ -55,31 +55,29 @@ contxtify -h
 
 ---
 
-## 📘 Examples
+## Examples
 
 Combine everything in the current directory:
 
 ```bash
-./contxtify
+contxtify
 ```
 
 Combine a specific project and name the output:
 
 ```bash
-./contxtify -r /path/to/project -o merged.txt
+contxtify -r /path/to/project -o merged.txt
 ```
 
 Include hidden files:
 
 ```bash
-./contxtify --all
+contxtify --all
 ```
 
 ---
 
-## 🧠 Output Format
-
-Example structure:
+## Output File Format
 
 ```
 # path: myproject/src/main.py
@@ -91,7 +89,7 @@ Example structure:
 
 ---
 
-## 🔒 Exclusions
+## Exclusions
 
 `contxtify` automatically skips:
 
