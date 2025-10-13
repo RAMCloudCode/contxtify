@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+###############################################################################
+# contxtify
+#
+# Recursively combines the contents of all regular files under a root directory
+# into a single text file. Adds a header before each file:
+#   # path: <root_dir_name>/relative/path/to/file.ext
+# and a blank line after each file.
+#
+# Hidden files and directories (names starting with ".") are skipped by default.
+# Use -a/--all to include them.
+#
+# The script excludes:
+#   - the output file itself
+#   - the temporary file used during assembly
+#   - the script file itself
+#
+# Cross-platform:
+#   - Linux (GNU utils) and macOS (BSD utils)
+#   - Handles GNU `realpath -s` when available, falls back otherwise
+#
+# Usage:
+#   ./contxtify [-r ROOT] [-o OUT] [-a] [-h]
+#
+# Options:
+#   -r, --root <dir>     Root directory to scan. Default: current directory
+#   -o, --output <file>  Output file name (created under ROOT). Default: combined.txt
+#   -a, --all            Include hidden files and directories
+#   -h, --help           Show help and exit
+#
+# Examples:
+#   ./contxtify
+#   ./contxtify -r /path/to/project -o merged.txt
+#   ./contxtify --all
+###############################################################################
+
+ROOT="."
+OUT="combined.txt"
+INCLUDE_HIDDEN="false"
+
+print_help() {
+  sed -n '3,/^###############################################################################$/p' "$0" | sed '$d'
+  cat <<'EOF'
+Description:
+  Recursively combines all regular files under the root directory into one
+  text file. Each file's relative path is added as a header before its content.
+  Useful for sharing an entire codebase as plain text (e.g., for AI analysis).
+
+Flags:
+  -r, --root <dir>     Root directory to scan. Default: current directory
+  -o, --output <file>  Output file name (under ROOT). Default: combined.txt
+  -a, --all            Include hidden files and directories
+  -h, --help           Show this help and exit
+
+Examples:
+  ./contxtify
+  ./contxtify -r /path/to/project -o merged.txt
+  ./contxtify --all
+  
+EOF
+}
+
+# Parse flags (supports short and long)
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -r|--root)
+      [ $# -ge 2 ] || { echo "Error: missing value for $1" >&2; exit 2; }
+      ROOT="$2"; shift 2;;
+    -o|--output)
+      [ $# -ge 2 ] || { echo "Error: missing value for $1" >&2; exit 2; }
+      OUT="$2"; shift 2;;
+    -a|--all)
+      INCLUDE_HIDDEN="true"; shift;;
+    -h|--help)
+      print_help; exit 0;;
+    --) shift; break;;
+    -*)
+      echo "Unknown option: $1" >&2; echo "Use -h for help." >&2; exit 2;;
+    *)
+      echo "Unexpected positional argument: $1" >&2; echo "Use -h for help." >&2; exit 2;;
+  esac
+done
+
+# Normalize root and output paths
+ROOT="$(cd "$ROOT" && pwd)"
+OUT_PATH="$ROOT/$OUT"
+
+# Temp file for safe write, auto-clean
+TMP="$(mktemp "${OUT_PATH}.tmp.XXXXXX")"
+trap 'rm -f "$TMP"' EXIT
+
+BASE="$(basename "$ROOT")"
+
+# realpath compatibility
+if realpath -s / >/dev/null 2>&1; then
+  REALPATH_CMD=(realpath -s)
+else
+  REALPATH_CMD=(realpath)
+fi
+
+# Safe resolver that tolerates non-existent paths
+rp() {
+  if "${REALPATH_CMD[@]}" "$1" >/dev/null 2>&1; then
+    "${REALPATH_CMD[@]}" "$1"
+  elif [ -e "$1" ] && realpath "$1" >/dev/null 2>&1; then
+    realpath "$1"
+  else
+    printf '%s\n' "$1"
+  fi
+}
+
+# Resolve key paths
+SCRIPT_REAL="$(rp "$0")"
+OUT_REAL="$(rp "$OUT_PATH")"
+TMP_REAL="$(rp "$TMP")"
+
+# Build find command (skip hidden by default)
+if [ "$INCLUDE_HIDDEN" != "true" ]; then
+  FIND_CMD=(
+    find "$ROOT"
+    \( -path "$ROOT/.*" -prune \) -o
+    -type f ! -name ".*" -print0
+  )
+else
+  FIND_CMD=(
+    find "$ROOT"
+    -type f -print0
+  )
+fi
+
+# Combine
+while IFS= read -r -d '' F; do
+  F_REAL="$(rp "$F")"
+  # Skip output, script, and temp
+  if [ "$F_REAL" = "$OUT_REAL" ] || [ "$F_REAL" = "$SCRIPT_REAL" ] || [ "$F_REAL" = "$TMP_REAL" ]; then
+    continue
+  fi
+  REL="${F#"$ROOT"/}"
+  {
+    printf '# path: %s/%s\n' "$BASE" "$REL"
+    cat -- "$F"
+    printf '\n'
+  } >> "$TMP"
+done < <("${FIND_CMD[@]}")
+
+mv -f -- "$TMP" "$OUT_PATH"
+trap - EXIT
+printf 'Wrote %s\n' "$OUT_PATH"
