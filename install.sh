@@ -9,13 +9,12 @@ REPO="${REPO:-RAMCloudCode/contxtify}"   # GitHub "owner/repo"
 REF="${REF:-main}"                        # branch or tag; default main
 SRC_PATH="${SRC_PATH:-contxtify}"         # path to script in repo
 BIN_NAME="${BIN_NAME:-contxtify}"         # install name
-PREFIX="${PREFIX:-/usr/local}"            # preferred prefix (if writable)
-TARGET_DIR="${TARGET_DIR:-$PREFIX/bin}"   # preferred bin dir
+TARGET_DIR="${TARGET_DIR:-/usr/local/bin}"  # exact install dir (preferred)
 FALLBACK_DIR="${FALLBACK_DIR:-$HOME/.local/bin}"
 
-# Pick install dir
+# Pick and create install dir
 INSTALL_DIR="$TARGET_DIR"
-if [ ! -w "$TARGET_DIR" ] 2>/dev/null; then
+if ! mkdir -p "$TARGET_DIR" 2>/dev/null; then
   INSTALL_DIR="$FALLBACK_DIR"
   mkdir -p "$INSTALL_DIR"
 fi
@@ -48,21 +47,55 @@ fi
 chmod +x "$TMP"
 mv "$TMP" "$INSTALL_DIR/$BIN_NAME"
 
+# Ensure PATH has INSTALL_DIR. Optionally auto-append to profile.
+# Set AUTO_PATH_UPDATE=0 to disable.
+AUTO_PATH_UPDATE="${AUTO_PATH_UPDATE:-1}"
+
+in_path() { case ":$PATH:" in *":$1:"*) return 0;; *) return 1;; esac; }
+
+if ! in_path "$INSTALL_DIR"; then
+  # Pick a profile file based on OS and shell
+  OS="$(uname 2>/dev/null || echo unknown)"
+  SH="$(basename "${SHELL:-sh}")"
+  case "$OS:$SH" in
+    Darwin:zsh) PROFILE="$HOME/.zprofile" ;;
+    Darwin:bash) PROFILE="$HOME/.bash_profile" ;;
+    Darwin:*) PROFILE="$HOME/.profile" ;;
+    *:zsh) PROFILE="$HOME/.zshrc" ;;
+    *:bash) PROFILE="$HOME/.bashrc" ;;
+    *:*) PROFILE="$HOME/.profile" ;;
+  esac
+
+  # Use $HOME form when possible for portability
+  case "$INSTALL_DIR" in
+    "$HOME"/*) PATH_DIR="\$HOME${INSTALL_DIR#$HOME}" ;;
+    *) PATH_DIR="$INSTALL_DIR" ;;
+  esac
+  LINE="export PATH=\"$PATH_DIR:\$PATH\""
+
+  if [ "$AUTO_PATH_UPDATE" = "1" ]; then
+    mkdir -p "$(dirname "$PROFILE")"
+    touch "$PROFILE"
+    if ! grep -qsF "$LINE" "$PROFILE"; then
+      echo "$LINE" >> "$PROFILE"
+      echo "Added PATH to $PROFILE:"
+      echo "  $LINE"
+    else
+      echo "PATH already configured in $PROFILE"
+    fi
+    echo "Open a new terminal or run: source \"$PROFILE\""
+  else
+    echo "Add to PATH so contxtify is available globally:"
+    echo "  $LINE"
+    echo "Append it to: $PROFILE  (then: source \"$PROFILE\")"
+  fi
+fi
+
 # Minimal dependency hints (non-fatal)
 need() { command -v "$1" >/dev/null 2>&1; }
 missing=""
 for d in bash find mktemp sed cat; do need "$d" || missing="$missing $d"; done
-if [ -n "$missing" ]; then
-  echo "Note: missing deps (script may still work with fallbacks):$missing" >&2
-fi
-if ! need realpath; then
-  echo "Note: 'realpath' not found. Script includes a fallback; install coreutils for best results." >&2
-fi
-
-# PATH hint
-case ":$PATH:" in
-  *":$INSTALL_DIR:"*) : ;;
-  *) echo "Add to PATH: export PATH=\"$INSTALL_DIR:\$PATH\"" ;;
-esac
+[ -n "$missing" ] && echo "Note: missing deps (script may still work with fallbacks):$missing" >&2
+command -v realpath >/dev/null 2>&1 || echo "Note: 'realpath' not found. Script includes a fallback; install coreutils for best results." >&2
 
 echo "Installed to $INSTALL_DIR/$BIN_NAME"
