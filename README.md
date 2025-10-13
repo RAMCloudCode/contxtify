@@ -14,11 +14,10 @@ Install directly (auto-selects `/usr/local/bin` or `~/.local/bin`):
 curl -fsSL https://raw.githubusercontent.com/RAMCloudCode/contxtify/main/install.sh | sh
 ```
 
-Customize the target or branch:
+To install to a custom directory:
 
 ```bash
-REPO=RAMCloudCode/contxtify REF=main PREFIX=/usr/local \
-curl -fsSL https://raw.githubusercontent.com/RAMCloudCode/contxtify/main/install.sh | sh
+PREFIX=/custom/path curl -fsSL https://raw.githubusercontent.com/RAMCloudCode/contxtify/main/install.sh | sh
 ```
 
 Verify installation:
@@ -29,7 +28,30 @@ contxtify -h
 
 ---
 
-## 🧩 Features
+## 📦 Drop‑in Script (Root Recommended)
+
+If you prefer to keep `contxtify` as a lightweight, project-local tool, just drop the script itself into your repo’s **root directory** — no install needed.
+
+Add the script directly:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/RAMCloudCode/contxtify/main/contxtify -o contxtify
+chmod +x contxtify
+git add contxtify
+git commit -m "Add contxtify"
+```
+
+Run it locally from your project root:
+
+```bash
+./contxtify -r . -o combined.txt
+```
+
+This approach keeps your repository self-contained and works anywhere without requiring installation.
+
+---
+
+## Features
 
 * **Recursive aggregation** — walks the entire directory tree.
 * **Context headers** — adds each file’s relative path before its contents.
@@ -114,7 +136,7 @@ contxtify --all
 
 ---
 
-## 🧹 Uninstall
+## Uninstall
 
 ```bash
 rm -f /usr/local/bin/contxtify ~/.local/bin/contxtify
