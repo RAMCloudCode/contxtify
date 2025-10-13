@@ -1,4 +1,4 @@
-<h1 align="center"> contxtify </h1>
+<h1 align="center"> Contxtify </h1>
 
 `contxtify` is a lightweight shell utility that turns an entire folder into a single text file. It collects the contents of every file in the directory and its subfolders, adds each file’s path as a header, and combines everything into one `.txt` file.
 
