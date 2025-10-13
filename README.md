@@ -19,6 +19,7 @@ To install to a custom directory:
 ```bash
 PREFIX=/custom/path curl -fsSL https://raw.githubusercontent.com/RAMCloudCode/contxtify/main/install.sh | sh
 ```
+If you set a custom PREFIX, the installer will automatically create a bin directory under it if one doesn’t exist.
 
 Verify installation:
 
