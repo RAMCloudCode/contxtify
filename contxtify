@@ -55,9 +55,9 @@ Flags:
   -h, --help           Show this help and exit
 
 Examples:
-  ./contxtify
-  ./contxtify -r /path/to/project -o merged.txt
-  ./contxtify --all
+  contxtify
+  contxtify -r /path/to/project -o merged.txt
+  contxtify --all
   
 EOF
 }
