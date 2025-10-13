@@ -1,6 +1,6 @@
 # contxtify
 
-`contxtify` is a lightweight Bash utility that recursively combines all regular files in a directory tree into a single text file. It is ideal for generating plain-text snapshots of entire projects for AI analysis, code reviews, or archival.
+`contxtify` is a lightweight shell utility that recursively combines all regular files in a directory tree into a single text file. It is ideal for generating plain-text snapshots of entire projects for AI analysis, code reviews, or archival.
 
 Each file is prefixed with a header like `# path: <root>/<relative/path>` before its contents, preserving full context and structure.
 
