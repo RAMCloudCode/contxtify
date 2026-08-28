@@ -94,8 +94,7 @@ fi
 # Minimal dependency hints (non-fatal)
 need() { command -v "$1" >/dev/null 2>&1; }
 missing=""
-for d in bash find mktemp sed cat; do need "$d" || missing="$missing $d"; done
+for d in bash find mktemp grep cat dirname basename mv rm; do need "$d" || missing="$missing $d"; done
 [ -n "$missing" ] && echo "Note: missing deps (script may still work with fallbacks):$missing" >&2
-command -v realpath >/dev/null 2>&1 || echo "Note: 'realpath' not found. Script includes a fallback; install coreutils for best results." >&2
 
 echo "Installed to $INSTALL_DIR/$BIN_NAME"

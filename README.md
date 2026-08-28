@@ -1,150 +1,225 @@
-<h1 align="center"> Contxtify </h1>
+# Contxtify
 
-`contxtify` is a lightweight shell utility that turns an entire folder into a single text file. It collects the contents of every file in the directory and its subfolders, adds each file’s path as a header, and combines everything into one `.txt` file.
+`contxtify` is a lightweight Bash utility that flattens the text files in a directory tree into one context file or stdout stream. Each included file is preceded by a root-inclusive path, making the result suitable for AI context, review, documentation, and plain-text project snapshots.
 
-The result is an easy way to turn a project or repository into context for AI, or to save a snapshot of a folder’s contents.
+It runs on macOS and Linux and automatically skips binary files.
 
----
+## Installation
 
-<h2 align="center"> 🚀 Installation </h2>
-
-Install directly (auto-selects `/usr/local/bin` or `~/.local/bin`):
+Install directly. The installer uses `/usr/local/bin` when writable and otherwise falls back to `~/.local/bin`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/RAMCloudCode/contxtify/main/install.sh | sh
 ```
 
-Choose an exact install directory by setting `TARGET_DIR` before running the installer:
+Choose an exact installation directory with `TARGET_DIR`:
 
 ```bash
 TARGET_DIR=/usr/local/scripts curl -fsSL https://raw.githubusercontent.com/RAMCloudCode/contxtify/main/install.sh | sh
 ```
 
-Verify installation:
+Verify the installation:
 
 ```bash
-contxtify -h
+contxtify --help
 ```
 
----
+## Project-local script
 
-<h2 align="center"> 📦 Drop‑in Script (Root Recommended)</h2>
-
-If you prefer to keep `contxtify` as a lightweight, project-local tool, just drop the script itself into your repo’s **root directory** — no install needed.
+You can also keep the script directly in a repository:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/RAMCloudCode/contxtify/main/contxtify -o contxtify
 chmod +x contxtify
-git add contxtify
-git commit -m "Add contxtify"
 ```
 
-Run it locally from your project root:
+Run it from the project directory:
 
 ```bash
-./contxtify -r . -o combined.txt
+./contxtify
 ```
 
-This approach keeps your repository self-contained and works anywhere without requiring installation.
+The script excludes itself when it is located inside the scanned directory.
 
----
+## Usage
 
-## 🧩 Features
+```text
+contxtify [options]
+```
 
-* **Recursive aggregation** — walks the entire directory tree.
-* **Context headers** — adds each file’s relative path before its contents.
-* **Cross-platform** — works on macOS and Linux (GNU and BSD utils).
-* **Hidden file toggle** — skips dotfiles unless `--all` is passed.
-* **Safe writes** — uses a temporary file to prevent corruption.
-* **Self-aware** — automatically excludes itself, its output, and temp files.
+| Flag | Long form | Description |
+| --- | --- | --- |
+| `-d DIR` | `--directory DIR` | Directory to scan recursively. Defaults to the current directory. |
+| `-r ROOT` | `--root ROOT` | Root used to calculate paths in file headers. Defaults to the scanned directory. |
+| `-o FILE` | `--output FILE` | Output file. A relative path is resolved from the current working directory. Defaults to `contxt-<directory-name>.txt`. |
+| `-o -` | `--output -` | Write flattened content to stdout and do not create an output file. |
+| `-i PATTERN` | `--ignore PATTERN` | Ignore a relative path or glob-style pattern. Repeat the option to add rules. |
+| `-g FILE` | `--gitignore FILE` | Use a specific ignore file instead of the automatic `<root>/.gitignore`. |
+| `-a` | `--all` | Include hidden files and directories. |
+| `-h` | `--help` | Show built-in help. |
 
----
+With no options, `contxtify` scans the current directory, uses that same directory as the path root, and writes `contxt-<current-directory-name>.txt` inside it.
 
-## ⚙️ Usage
+## Directory and root behavior
+
+`--directory` controls only what is scanned. `--root` only controls how paths are calculated for the output headers. Each header includes the root directory itself, followed by the file's path beneath it.
+
+The scanned directory must be the root itself or a directory beneath it. A directory outside the root is rejected because it cannot produce an unambiguous root-relative path.
+
+For example:
 
 ```bash
-contxtify [-r ROOT] [-o OUT] [-a] [-h]
+contxtify --root /project --directory /project/src
 ```
 
-| Flag | Long Form         | Description                                         |
-| ---- | ----------------- | --------------------------------------------------- |
-| `-r` | `--root <dir>`    | Root directory to scan (default: current directory) |
-| `-o` | `--output <file>` | Output file name (default: `combined.txt`)          |
-| `-a` | `--all`           | Include hidden files and directories                |
-| `-h` | `--help`          | Show help and exit                                  |
+Only `/project/src` is scanned, while each header starts with the root directory name, `project`:
 
----
+```text
+<<< FILE: project/src/package/module.py >>>
 
-## 📘 Examples
+<contents of module.py>
+```
 
-Combine everything in the current directory:
+If `--root` is omitted, it defaults to `--directory`. If both are omitted, both default to the current directory.
+
+## Output
+
+The default output name uses the basename of the scanned directory, but the file is created in the current working directory. For example, when invoked from `~/Desktop`:
+
+```bash
+cd ~/Desktop
+contxtify --directory ~/projects/repoA
+```
+
+This writes:
+
+```text
+~/Desktop/contxt-repoA.txt
+```
+
+Use `--output` to choose another name. Relative output paths are resolved from the directory where `contxtify` was invoked, independently of `--directory`. Absolute output paths continue to work normally.
+
+Use `-o -` to send only the flattened content to stdout:
+
+```bash
+contxtify -o - | pbcopy
+contxtify -o - > project-context.txt
+contxtify -d src -r . -o - | less
+```
+
+The normal `Wrote ...` status message is not emitted in stdout mode, so it cannot pollute a pipe or redirected file.
+
+## Output format
+
+Every text file begins with this marker:
+
+```text
+<<< FILE: root-directory/path/to/file >>>
+
+<file contents>
+```
+
+There is exactly one blank line between the `<<< FILE: ... >>>` marker and the beginning of the file contents. Paths include the basename of `--root` and then the path beneath that root. When `--root` is `/`, the header retains the leading `/`.
+
+## Ignore behavior
+
+Explicit ignore rules are repeatable and additive:
+
+```bash
+contxtify -i build -i '*.log' -i generated/cache
+```
+
+Rules without a slash, such as `build` or `*.log`, match names at any depth. Relative paths containing a slash, such as `generated/cache`, are resolved from the scanned directory. Quote glob patterns so the shell does not expand them before `contxtify` receives them.
+
+Matching directories are pruned by `find`; their contents are never traversed or scanned.
+
+### Automatic `.gitignore`
+
+If `<root>/.gitignore` exists, `contxtify` automatically loads it as another source of ignore rules. Common `.gitignore` behavior is supported, including comments, basename and path globs, directory-only rules, root-anchored rules, and negated re-inclusion rules.
+
+Supply a different file with `--gitignore`:
+
+```bash
+contxtify --gitignore config/context.gitignore
+```
+
+Patterns in either the automatic or explicitly supplied ignore file are interpreted relative to `--root`.
+
+The explicit file replaces the automatically discovered `<root>/.gitignore`. Rules from `-i` and `--ignore` remain additive.
+
+### Other automatic exclusions
+
+Independently of ignore rules, `contxtify` skips:
+
+- Binary files, detected with a lightweight NUL-byte-oriented text check
+- The generated output file
+- Its temporary assembly file
+- The `contxtify` script itself when it is inside the scan
+- Hidden files and directories, unless `--all` is used
+
+Binary exclusion is always enabled. This prevents images, compiled artifacts, archives, and other non-text formats from being copied into the flattened output.
+
+## Examples
+
+Scan the current directory with all defaults:
 
 ```bash
 contxtify
 ```
 
-Combine a specific project and name the output:
+Scan a repository and choose the output name:
 
 ```bash
-contxtify -r /path/to/project -o merged.txt
+contxtify -d /path/to/project -o merged.txt
 ```
 
-Include hidden files:
+Scan only a source subtree while retaining project-root-inclusive headers:
+
+```bash
+contxtify -r /path/to/project -d /path/to/project/src
+```
+
+Include hidden files while keeping ignore and binary exclusions active:
 
 ```bash
 contxtify --all
 ```
 
----
-
-## 🧠 Output Format
-
-```
-# path: myproject/src/main.py
-<contents of main.py>
-
-# path: myproject/README.md
-<contents of README.md>
-```
-
----
-
-## 🔒 Exclusions
-
-`contxtify` automatically skips:
-
-* The script file itself
-* The output file
-* Temporary working files
-
----
-
-## 💡 Common Use Cases
-
-* Exporting codebases for LLM or AI model ingestion
-* Generating plain-text project archives for documentation or audit
-* Sharing complex directory structures as unified readable text
-
----
-
-## 🛠 Compatibility
-
-* **Tested on:** macOS, Ubuntu, Debian
-* **Dependencies:** `bash`, `find`, `realpath`, `mktemp`, `sed`, `cat`
-
----
-
-<h2 align="center"> Uninstall </h2>
+Combine explicit rules with the root `.gitignore`:
 
 ```bash
-rm -f /usr/local/bin/contxtify ~/.local/bin/contxtify
+contxtify -i build -i '*.log' -i generated/cache
 ```
 
----
+Stream the result without creating a file:
 
-## 🧾 License
+```bash
+contxtify -o - | pbcopy
+```
 
-Licensed under the **GNU General Public License v3.0 (GPL-3.0)**.
+## Compatibility
+
+- Supported platforms: macOS and Linux
+- Required commands: `bash`, `find`, `mktemp`, `grep`, `cat`, `dirname`, `basename`, `mv`, and `rm`
+- No language runtime, package manager, or Git installation is required
+
+## Uninstall
+
+Remove the installed executable from whichever installation location was used, for example:
+
+```bash
+rm -f /usr/local/bin/contxtify
+```
+
+or:
+
+```bash
+rm -f ~/.local/bin/contxtify
+```
+
+## License
+
+Licensed under the GNU General Public License v3.0 (GPL-3.0).
 
 You may use, modify, and distribute this software under the same license terms.
 

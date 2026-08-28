@@ -4,147 +4,381 @@ set -euo pipefail
 ###############################################################################
 # contxtify
 #
-# Recursively combines the contents of all regular files under a root directory
-# into a single text file. Adds a header before each file:
-#   # path: <root_dir_name>/relative/path/to/file.ext
-# and a blank line after each file.
+# Recursively combines text files from a directory into one flattened stream.
+# Each file starts with a path that includes the selected root directory:
 #
-# Hidden files and directories (names starting with ".") are skipped by default.
-# Use -a/--all to include them.
+#   <<< FILE: root/path/to/file >>>
 #
-# The script excludes:
-#   - the output file itself
-#   - the temporary file used during assembly
-#   - the script file itself
-#
-# Cross-platform:
-#   - Linux (GNU utils) and macOS (BSD utils)
-#   - Handles GNU `realpath -s` when available, falls back otherwise
+# Hidden files and directories are skipped unless -a/--all is used. Explicit
+# ignore rules and a root-level .gitignore are additive, and matching directories
+# are pruned before traversal. Files that appear to be binary are always skipped.
 #
 # Usage:
-#   ./contxtify [-r ROOT] [-o OUT] [-a] [-h]
-#
-# Options:
-#   -r, --root <dir>     Root directory to scan. Default: current directory
-#   -o, --output <file>  Output file name (created under ROOT). Default: combined.txt
-#   -a, --all            Include hidden files and directories
-#   -h, --help           Show help and exit
-#
-# Examples:
-#   ./contxtify
-#   ./contxtify -r /path/to/project -o merged.txt
-#   ./contxtify --all
+#   contxtify [-d DIR] [-r ROOT] [-o OUT|-] [-i PATTERN] [-g FILE] [-a] [-h]
 ###############################################################################
 
-ROOT="."
-OUT="combined.txt"
+DIRECTORY="."
+ROOT=""
+OUT=""
 INCLUDE_HIDDEN="false"
+GITIGNORE_FILE=""
+GITIGNORE_SET="false"
+IGNORE_PATTERNS=()
 
 print_help() {
-  sed -n '3,/^###############################################################################$/p' "$0" | sed '$d'
-  cat <<'EOF'
-Description:
-  Recursively combines all regular files under the root directory into one
-  text file. Each file's relative path is added as a header before its content.
-  Useful for sharing an entire codebase as plain text (e.g., for AI analysis).
+  cat <<'HELP'
+Usage:
+  contxtify [options]
 
-Flags:
-  -r, --root <dir>     Root directory to scan. Default: current directory
-  -o, --output <file>  Output file name (under ROOT). Default: combined.txt
-  -a, --all            Include hidden files and directories
-  -h, --help           Show this help and exit
+Description:
+  Recursively combines text files from a directory into one flattened output.
+  File headers include the --root directory name and use this format:
+
+    <<< FILE: root/path/to/file >>>
+
+  Exactly one blank line separates each header from its file contents. Binary
+  files are detected automatically and skipped.
+
+Options:
+  -d, --directory <dir>   Directory to scan. Default: current directory
+  -r, --root <dir>        Root used only to calculate header paths. Defaults to
+                          --directory; the scanned directory must be within it
+  -o, --output <file|->   Output file. Relative paths resolve from the current
+                          working directory. Default: contxt-<directory-name>.txt
+                          Use '-' to write flattened content to stdout
+  -i, --ignore <pattern>  Ignore a relative path or glob pattern. Repeatable;
+                          matching directories are pruned during traversal
+  -g, --gitignore <file>  Use this ignore file instead of <root>/.gitignore
+  -a, --all               Include hidden files and directories
+  -h, --help              Show this help and exit
+
+Ignore behavior:
+  If <root>/.gitignore exists, its rules are loaded automatically. An explicitly
+  supplied --gitignore file replaces that automatic file. Rules supplied with
+  --ignore are always additive. Binary-file exclusion is always enabled and is
+  independent of those rules.
 
 Examples:
   contxtify
-  contxtify -r /path/to/project -o merged.txt
-  contxtify --all
-  
-EOF
+  contxtify -d /project/src -r /project
+  contxtify -i build -i '*.log' -i generated/cache
+  contxtify --gitignore /path/to/alternate.gitignore
+  contxtify -o - | pbcopy
+HELP
 }
 
-# Parse flags (supports short and long)
-while [ $# -gt 0 ]; do
+error() {
+  printf 'Error: %s\n' "$*" >&2
+  exit 2
+}
+
+while [ "$#" -gt 0 ]; do
   case "$1" in
+    -d|--directory)
+      [ "$#" -ge 2 ] || error "missing value for $1"
+      DIRECTORY="$2"
+      shift 2
+      ;;
     -r|--root)
-      [ $# -ge 2 ] || { echo "Error: missing value for $1" >&2; exit 2; }
-      ROOT="$2"; shift 2;;
+      [ "$#" -ge 2 ] || error "missing value for $1"
+      ROOT="$2"
+      shift 2
+      ;;
     -o|--output)
-      [ $# -ge 2 ] || { echo "Error: missing value for $1" >&2; exit 2; }
-      OUT="$2"; shift 2;;
+      [ "$#" -ge 2 ] || error "missing value for $1"
+      OUT="$2"
+      shift 2
+      ;;
+    -i|--ignore)
+      [ "$#" -ge 2 ] || error "missing value for $1"
+      IGNORE_PATTERNS+=("$2")
+      shift 2
+      ;;
+    -g|--gitignore)
+      [ "$#" -ge 2 ] || error "missing value for $1"
+      GITIGNORE_FILE="$2"
+      GITIGNORE_SET="true"
+      shift 2
+      ;;
     -a|--all)
-      INCLUDE_HIDDEN="true"; shift;;
+      INCLUDE_HIDDEN="true"
+      shift
+      ;;
     -h|--help)
-      print_help; exit 0;;
-    --) shift; break;;
+      print_help
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
     -*)
-      echo "Unknown option: $1" >&2; echo "Use -h for help." >&2; exit 2;;
+      error "unknown option: $1 (use -h for help)"
+      ;;
     *)
-      echo "Unexpected positional argument: $1" >&2; echo "Use -h for help." >&2; exit 2;;
+      error "unexpected positional argument: $1 (use -h for help)"
+      ;;
   esac
 done
 
-# Normalize root and output paths
-ROOT="$(cd "$ROOT" && pwd)"
-OUT_PATH="$ROOT/$OUT"
+[ "$#" -eq 0 ] || error "unexpected positional argument: $1 (use -h for help)"
 
-# Temp file for safe write, auto-clean
-TMP="$(mktemp "${OUT_PATH}.tmp.XXXXXX")"
-trap 'rm -f "$TMP"' EXIT
+INVOCATION_DIR="$(pwd -P)"
 
-BASE="$(basename "$ROOT")"
+[ -d "$DIRECTORY" ] || error "directory does not exist: $DIRECTORY"
+DIRECTORY="$(cd "$DIRECTORY" && pwd -P)"
 
-# realpath compatibility
-if realpath -s / >/dev/null 2>&1; then
-  REALPATH_CMD=(realpath -s)
-else
-  REALPATH_CMD=(realpath)
+if [ -z "$ROOT" ]; then
+  ROOT="$DIRECTORY"
+fi
+[ -d "$ROOT" ] || error "root does not exist: $ROOT"
+ROOT="$(cd "$ROOT" && pwd -P)"
+
+if [ "$ROOT" != "/" ]; then
+  case "$DIRECTORY" in
+    "$ROOT"|"$ROOT"/*) ;;
+    *) error "directory must be located within root: $DIRECTORY is outside $ROOT" ;;
+  esac
 fi
 
-# Safe resolver that tolerates non-existent paths
-rp() {
-  if "${REALPATH_CMD[@]}" "$1" >/dev/null 2>&1; then
-    "${REALPATH_CMD[@]}" "$1"
-  elif [ -e "$1" ] && realpath "$1" >/dev/null 2>&1; then
-    realpath "$1"
+DIRECTORY_NAME="$(basename "$DIRECTORY")"
+[ "$DIRECTORY_NAME" != "/" ] || DIRECTORY_NAME="root"
+if [ -z "$OUT" ]; then
+  OUT="contxt-${DIRECTORY_NAME}.txt"
+fi
+
+canonical_file_path() {
+  local path="$1"
+  local dir name
+  dir="$(dirname "$path")"
+  name="$(basename "$path")"
+  if [ -d "$dir" ]; then
+    printf '%s/%s\n' "$(cd "$dir" && pwd -P)" "$name"
   else
-    printf '%s\n' "$1"
+    printf '%s\n' "$path"
   fi
 }
 
-# Resolve key paths
-SCRIPT_REAL="$(rp "$0")"
-OUT_REAL="$(rp "$OUT_PATH")"
-TMP_REAL="$(rp "$TMP")"
+SCRIPT_REAL="$(canonical_file_path "$0")"
+STDOUT_MODE="false"
+OUT_REAL=""
 
-# Build find command (skip hidden by default)
-if [ "$INCLUDE_HIDDEN" != "true" ]; then
-  FIND_CMD=(
-    find "$ROOT"
-    \( -path "$ROOT/.*" -prune \) -o
-    -type f ! -name ".*" -print0
-  )
+if [ "$OUT" = "-" ]; then
+  STDOUT_MODE="true"
+  TMP="$(mktemp "${TMPDIR:-/tmp}/contxtify.XXXXXX")"
 else
-  FIND_CMD=(
-    find "$ROOT"
-    -type f -print0
-  )
+  case "$OUT" in
+    /*) OUT_PATH="$OUT" ;;
+    *) OUT_PATH="$INVOCATION_DIR/$OUT" ;;
+  esac
+  OUT_DIR="$(dirname "$OUT_PATH")"
+  [ -d "$OUT_DIR" ] || error "output directory does not exist: $OUT_DIR"
+  OUT_REAL="$(canonical_file_path "$OUT_PATH")"
+  TMP="$(mktemp "${OUT_REAL}.tmp.XXXXXX")"
 fi
 
-# Combine
-while IFS= read -r -d '' F; do
-  F_REAL="$(rp "$F")"
-  # Skip output, script, and temp
-  if [ "$F_REAL" = "$OUT_REAL" ] || [ "$F_REAL" = "$SCRIPT_REAL" ] || [ "$F_REAL" = "$TMP_REAL" ]; then
+TMP_REAL="$(canonical_file_path "$TMP")"
+trap 'rm -f "$TMP"' EXIT
+
+if [ "$GITIGNORE_SET" = "true" ]; then
+  [ -f "$GITIGNORE_FILE" ] || error "gitignore file does not exist: $GITIGNORE_FILE"
+  GITIGNORE_FILE="$(canonical_file_path "$GITIGNORE_FILE")"
+elif [ -f "$ROOT/.gitignore" ]; then
+  GITIGNORE_FILE="$ROOT/.gitignore"
+fi
+
+# find expression fragments used for both file exclusion and directory pruning.
+IGNORE_TESTS=()
+GIT_BASES=()
+GIT_PATTERNS=()
+GIT_DIR_ONLY=()
+GIT_NEGATED=()
+MATCH_TEST=()
+
+append_or() {
+  if [ "${#IGNORE_TESTS[@]}" -gt 0 ]; then
+    IGNORE_TESTS+=( -o )
+  fi
+}
+
+make_match_test() {
+  local base="$1"
+  local pattern="$2"
+  local dir_only="${3:-false}"
+  local anchored="${4:-false}"
+  local full has_slash
+
+  while [ "${pattern#./}" != "$pattern" ]; do
+    pattern="${pattern#./}"
+  done
+  case "$pattern" in
+    /*)
+      full="$pattern"
+      has_slash="true"
+      ;;
+    */*)
+      full="$base/$pattern"
+      has_slash="true"
+      ;;
+    *)
+      if [ "$anchored" = "true" ]; then
+        full="$base/$pattern"
+        has_slash="true"
+      else
+        full="$pattern"
+        has_slash="false"
+      fi
+      ;;
+  esac
+
+  MATCH_TEST=()
+  [ -n "$pattern" ] || return
+  if [ "$dir_only" = "true" ]; then
+    MATCH_TEST+=( \( -type d -a )
+  fi
+  if [ "$has_slash" = "true" ]; then
+    MATCH_TEST+=( -path "$full" )
+  else
+    MATCH_TEST+=( -name "$full" )
+  fi
+  if [ "$dir_only" = "true" ]; then
+    MATCH_TEST+=( \) )
+  fi
+}
+
+add_explicit_ignore() {
+  make_match_test "$@"
+  [ "${#MATCH_TEST[@]}" -gt 0 ] || return
+  append_or
+  IGNORE_TESTS+=( "${MATCH_TEST[@]}" )
+}
+
+for PATTERN in "${IGNORE_PATTERNS[@]}"; do
+  DIR_ONLY="false"
+  case "$PATTERN" in
+    */) PATTERN="${PATTERN%/}"; DIR_ONLY="true" ;;
+  esac
+  add_explicit_ignore "$DIRECTORY" "$PATTERN" "$DIR_ONLY"
+done
+
+# Translate .gitignore rules into an ordered find expression. A positive rule is
+# active unless a later negated rule matches the same path. This keeps matching
+# directories in find's prune branch while honoring common re-inclusion rules.
+if [ -n "$GITIGNORE_FILE" ]; then
+  while IFS= read -r RULE || [ -n "$RULE" ]; do
+    case "$RULE" in
+      *$'\r') RULE="${RULE%$'\r'}" ;;
+    esac
+    case "$RULE" in
+      ''|'#'*) continue ;;
+      '\#'*) RULE="${RULE#\\}" ;;
+    esac
+
+    NEGATED="false"
+    case "$RULE" in
+      '!') continue ;;
+      '!'*) RULE="${RULE#!}"; NEGATED="true" ;;
+      '\!'*) RULE="${RULE#\\}" ;;
+    esac
+    DIR_ONLY="false"
+    case "$RULE" in
+      */) RULE="${RULE%/}"; DIR_ONLY="true" ;;
+    esac
+    ANCHORED="false"
+    case "$RULE" in
+      /*) RULE="${RULE#/}"; ANCHORED="true" ;;
+    esac
+    [ -n "$RULE" ] || continue
+
+    GIT_BASES+=("$ROOT")
+    GIT_PATTERNS+=("$RULE")
+    GIT_DIR_ONLY+=("$DIR_ONLY")
+    GIT_NEGATED+=("$NEGATED:$ANCHORED")
+  done < "$GITIGNORE_FILE"
+fi
+
+GITIGNORE_TESTS=()
+for ((I = 0; I < ${#GIT_PATTERNS[@]}; I++)); do
+  case "${GIT_NEGATED[$I]}" in
+    true:*) continue ;;
+    *:true) RULE_ANCHORED="true" ;;
+    *) RULE_ANCHORED="false" ;;
+  esac
+  make_match_test "${GIT_BASES[$I]}" "${GIT_PATTERNS[$I]}" "${GIT_DIR_ONLY[$I]}" "$RULE_ANCHORED"
+  RULE_TEST=( \( "${MATCH_TEST[@]}" )
+
+  for ((J = I + 1; J < ${#GIT_PATTERNS[@]}; J++)); do
+    case "${GIT_NEGATED[$J]}" in
+      true:true) NEGATED_ANCHORED="true" ;;
+      true:false) NEGATED_ANCHORED="false" ;;
+      *) continue ;;
+    esac
+    make_match_test "${GIT_BASES[$J]}" "${GIT_PATTERNS[$J]}" "${GIT_DIR_ONLY[$J]}" "$NEGATED_ANCHORED"
+    RULE_TEST+=( -a ! \( "${MATCH_TEST[@]}" \) )
+  done
+  RULE_TEST+=( \) )
+
+  if [ "${#GITIGNORE_TESTS[@]}" -gt 0 ]; then
+    GITIGNORE_TESTS+=( -o )
+  fi
+  GITIGNORE_TESTS+=( "${RULE_TEST[@]}" )
+done
+
+if [ "${#GITIGNORE_TESTS[@]}" -gt 0 ]; then
+  append_or
+  IGNORE_TESTS+=( \( "${GITIGNORE_TESTS[@]}" \) )
+fi
+
+FIND_CMD=(find "$DIRECTORY" -mindepth 1)
+if [ "$INCLUDE_HIDDEN" != "true" ]; then
+  append_or
+  IGNORE_TESTS+=( -name '.*' )
+fi
+
+if [ "${#IGNORE_TESTS[@]}" -gt 0 ]; then
+  FIND_CMD+=( \( "${IGNORE_TESTS[@]}" \) -prune -o -type f -print0 )
+else
+  FIND_CMD+=( -type f -print0 )
+fi
+
+is_binary() {
+  [ -s "$1" ] || return 1
+  if LC_ALL=C grep -I '' "$1" >/dev/null 2>&1; then
+    return 1
+  fi
+  return 0
+}
+
+relative_to_root() {
+  if [ "$ROOT" = "/" ]; then
+    printf '/%s\n' "${1#/}"
+  else
+    printf '%s/%s\n' "$(basename "$ROOT")" "${1#"$ROOT"/}"
+  fi
+}
+
+while IFS= read -r -d '' FILE_PATH; do
+  FILE_REAL="$(canonical_file_path "$FILE_PATH")"
+  if [ "$FILE_REAL" = "$OUT_REAL" ] || [ "$FILE_REAL" = "$SCRIPT_REAL" ] || [ "$FILE_REAL" = "$TMP_REAL" ]; then
     continue
   fi
-  REL="${F#"$ROOT"/}"
+  if is_binary "$FILE_PATH"; then
+    continue
+  fi
+
+  RELATIVE_PATH="$(relative_to_root "$FILE_PATH")"
   {
-    printf '# path: %s/%s\n' "$BASE" "$REL"
-    cat -- "$F"
+    printf '<<< FILE: %s >>>\n\n' "$RELATIVE_PATH"
+    cat -- "$FILE_PATH"
     printf '\n'
   } >> "$TMP"
 done < <("${FIND_CMD[@]}")
 
-mv -f -- "$TMP" "$OUT_PATH"
+if [ "$STDOUT_MODE" = "true" ]; then
+  cat -- "$TMP"
+  rm -f "$TMP"
+else
+  mv -f -- "$TMP" "$OUT_REAL"
+  printf 'Wrote %s\n' "$OUT_REAL"
+fi
 trap - EXIT
-printf 'Wrote %s\n' "$OUT_PATH"
