@@ -12,11 +12,14 @@ BIN_NAME="${BIN_NAME:-contxtify}"         # install name
 TARGET_DIR="${TARGET_DIR:-/usr/local/bin}"  # exact install dir (preferred)
 FALLBACK_DIR="${FALLBACK_DIR:-$HOME/.local/bin}"
 
-# Pick and create install dir
+# Pick and create a writable install dir
 INSTALL_DIR="$TARGET_DIR"
-if ! mkdir -p "$TARGET_DIR" 2>/dev/null; then
+if ! mkdir -p "$TARGET_DIR" 2>/dev/null || [ ! -w "$TARGET_DIR" ]; then
   INSTALL_DIR="$FALLBACK_DIR"
-  mkdir -p "$INSTALL_DIR"
+  if ! mkdir -p "$INSTALL_DIR" 2>/dev/null || [ ! -w "$INSTALL_DIR" ]; then
+    echo "Error: cannot write to $TARGET_DIR or fallback $FALLBACK_DIR" >&2
+    exit 1
+  fi
 fi
 
 # Fetch helper (curl or wget)
@@ -45,7 +48,22 @@ if ! head -n 1 "$TMP" | grep -q '^#!/usr/bin/env bash$'; then
 fi
 
 chmod +x "$TMP"
-mv "$TMP" "$INSTALL_DIR/$BIN_NAME"
+if ! mv "$TMP" "$INSTALL_DIR/$BIN_NAME" 2>/dev/null; then
+  # The permission check above can become stale, or the destination itself may
+  # have restrictions. Retry in the fallback directory before giving up.
+  if [ "$INSTALL_DIR" = "$FALLBACK_DIR" ]; then
+    echo "Error: could not install to $INSTALL_DIR" >&2
+    exit 1
+  fi
+
+  echo "Cannot install to $INSTALL_DIR; falling back to $FALLBACK_DIR" >&2
+  INSTALL_DIR="$FALLBACK_DIR"
+  if ! mkdir -p "$INSTALL_DIR" 2>/dev/null || [ ! -w "$INSTALL_DIR" ]; then
+    echo "Error: fallback directory is not writable: $INSTALL_DIR" >&2
+    exit 1
+  fi
+  mv "$TMP" "$INSTALL_DIR/$BIN_NAME"
+fi
 
 # Ensure PATH has INSTALL_DIR. Optionally auto-append to profile.
 # Set AUTO_PATH_UPDATE=0 to disable.
